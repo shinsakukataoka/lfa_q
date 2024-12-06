@@ -1,0 +1,12 @@
+/env/
+
+# Exclude all .png files
+*.png
+
+# Exclude all .err and .out files
+*.err
+*.out
+
+# Exclude the /data directory and all its contents
+/data/
+

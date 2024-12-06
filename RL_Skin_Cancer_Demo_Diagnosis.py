@@ -383,12 +383,15 @@ def main(_):
                     updated_q_values = updated_q_values * (1 - done_sample) - done_sample
 
                     # Create a mask so we only calculate loss on the updated Q-values
-                    masks = tf.one_hot(action_sample, len(vocab))
+                    print("action_sample:", action_sample)
+                    masks = tf.one_hot(action_sample, Flags.n_actions)
 
                     with tf.GradientTape() as tape:
                         # Train the model on the states and updated Q-values
                         q_values = q_network(state_sample, training=True)
-
+                        
+                        print("Shape of q_values:", q_values.shape)
+                        print("Shape of masks:", masks.shape)
                         # Apply the masks to the Q-values to get the Q-value for action taken
                         q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
                         # Calculate loss between new Q-value and old Q-value
@@ -411,7 +414,7 @@ def main(_):
                     del done_history[:1]
 
 
-            except tf.python.framework.errors_impl.OutOfRangeError:
+            except tf.errors.OutOfRangeError:
                 done = True
                 break
 
@@ -499,44 +502,45 @@ def main(_):
     plt.plot(episode_reward_history)
     plt.xlabel('Episodes')
     plt.ylabel('Reward Per Episode - Train')
-    plt.show()
+    plt.savefig("train_rewards.png")
+
 
     plt.figure(2)
     plt.plot(episode_val_reward_history)
     plt.xlabel('Episodes')
     plt.ylabel('Reward Per Episode - Val')
-    plt.show()
+    plt.savefig("val_rewards.png")
 
     plt.figure(3)
     plt.plot(validation_bacc_history)
     plt.xlabel('Episodes')
     plt.ylabel('RL BAcc')
-    plt.show()
+    plt.savefig("balanced_accuracy.png")
 
     plt.figure(4)
     plt.plot(mel_history)
     plt.xlabel('Episodes')
     plt.ylabel('Number Melanoma Decisions')
-    plt.show()
+    plt.savefig("melanoma_decisions.png")
 
     plt.figure(5)
     plt.plot(unk_history)
     plt.xlabel('Episodes')
     plt.ylabel('Number of Unknown Decisions')
-    plt.show()
+    plt.savefig("unknown_decisions.png")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
         '--n_patients',
         type=int,
-        default= 100,
+        default=100,
         help='Number of patients per episode.'
     )
     parser.add_argument(
         '--n_episodes',
         type=int,
-        default= 150,
+        default=150,
         help='Number of episodes to play'
     )
     parser.add_argument(
@@ -544,6 +548,12 @@ if __name__ == '__main__':
         type=bool,
         default=False,
         help='Whether to use unknown action or not distribution'
+    )
+    parser.add_argument(
+        '--n_actions',
+        type=int,
+        default=3,  # Set a sensible default
+        help='Number of actions to consider'
     )
     Flags, unparsed = parser.parse_known_args()
     tf1.app.run(main=main)
