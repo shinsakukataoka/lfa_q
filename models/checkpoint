@@ -1,2 +1,2 @@
-model_checkpoint_path: "q_network_diagnosis_final"
-all_model_checkpoint_paths: "q_network_diagnosis_final"
+model_checkpoint_path: "best_q_network_management"
+all_model_checkpoint_paths: "best_q_network_management"

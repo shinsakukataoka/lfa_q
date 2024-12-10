@@ -153,58 +153,10 @@ class Dermatologist(Env):
         #Reward Table (#actions X #Classes - AKIEC/BCC/BKL/DF/MEL/NV/VASC)
 
         if n_actions == 2:
-            ## PERSONAL (Expert 1) - 2 actions
             reward_table = np.array([[-3, -4,  4,  4, -5,  4,  4], #dismiss
                                      [ 3,  4, -1, -1,  5, -1, -1], #excise
                                     ],np.float32)
-            
-            # ## PERSONAL (Expert 2) - 2 actions
-            # reward_table = np.array([[-5, -5, 20, 20, -20, 20, 20], #dismiss
-            #                          [ 5,  5, -5, -5,  20, -5, -5], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 3) - 2 actions
-            # reward_table = np.array([[-1, -5,  2,  2, -10,  2,  2], #dismiss
-            #                          [ 2,  5, -3, -3,  10, -3, -3], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 4) - 2 actions
-            # reward_table = np.array([[-3, -4,  3,  3, -5,  3,  3], #dismiss
-            #                          [ 1,  2, -3, -3,  5, -3, -3], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 5) - 2 actions
-            # reward_table = np.array([[-3, -5,  5,  5, -5,  5,  5], #dismiss
-            #                          [ 5,  5, -5, -5,  5, -5, -5], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 6) - 2 actions
-            # reward_table = np.array([[-3, -3,  5,  5, -5,  5,  5], #dismiss
-            #                          [ 1,  4, -1, -1,  5, -1, -1], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 7) - 2 actions
-            # reward_table = np.array([[  1,  1,  5,  5, -3,  5,  5], #dismiss
-            #                          [ -3,  5, -5, -5,  5, -5, -5], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 8) - 2 actions
-            # reward_table = np.array([[ -1, -3,  5,  5, -5,  5,  5], #dismiss
-            #                          [  1,  3, -1, -1,  5, -1, -1], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 9) - 2 actions
-            # reward_table = np.array([[-1, -2,  5,  5, -5,  5,  5], #dismiss
-            #                          [ 2,  4, -4, -4,  5, -4, -4], #excise
-            #                         ],np.float32)
-
-            # ## PERSONAL (Expert 10) - 2 actions
-            # reward_table = np.array([[-2, -3,  4,  4, -5,  4,  4], #dismiss
-            #                          [ 3,  5, -3, -3,  5, -3, -3], #excise
-            #                         ],np.float32)
-
         else:
-            ## CONSENSOUS MEDIAN - 3 Actions
             reward_table = np.array([[  -2,  -3,   5,   5, -5,   5,    5], #dismiss
                                      [   3,   1,  -1,  -1, -5,  -1,   -1], #cryo
                                      [   2, 4.5,  -3,  -3,  5,  -3,  -3], #excise
@@ -382,10 +334,8 @@ def main(_):
                 epsilon = max(epsilon, epsilon_min)
 
                 revised_state,n_state,reward,done,_ = derm.step(patients,Flags.n_patients,Flags.n_actions,action)
-                #print('The decision is ' + vocab[np.argmax(revised_state)])
 
                 episode_score += reward
-                #n_state = np.concatenate([n_state, [0]])
 
                 # Save actions and states in replay buffer
                 action_history.append(action)
@@ -408,11 +358,17 @@ def main(_):
                     action_sample = [action_history[i] for i in indices]
                     done_sample = tf.convert_to_tensor([float(done_history[i]) for i in indices])
 
-                    # Build the updated Q-values for the sampled future states
-                    # Use the target model for stability
-                    future_rewards = target_network.predict(state_next_sample)
-                    # Q value = reward + discount factor * expected future reward
-                    updated_q_values = rewards_sample + gamma * tf.reduce_max(future_rewards, axis=1)
+                    # Double DQN logic:
+                    # 1. Select the best action at next state with q_network
+                    q_values_next = q_network(state_next_sample, training=False)
+                    best_actions = tf.argmax(q_values_next, axis=1)
+
+                    # 2. Evaluate these actions using the target network
+                    future_q_values = target_network(state_next_sample, training=False)
+                    indices = tf.stack([tf.range(tf.shape(future_q_values)[0], dtype=tf.int32), tf.cast(best_actions, tf.int32)], axis=1)
+                    future_q_values = tf.gather_nd(future_q_values, indices)
+
+                    updated_q_values = rewards_sample + gamma * future_q_values
 
                     # If final frame set the last value to -1
                     updated_q_values = updated_q_values * (1 - done_sample) - done_sample
@@ -434,7 +390,7 @@ def main(_):
                     optimizer.apply_gradients(zip(grads, q_network.trainable_variables))
 
                 if iter_count % update_target_network == 0:
-                    # update the the target network with new weights
+                    # update the target network with new weights
                     target_network.set_weights(q_network.get_weights())
 
                 # Limit the state and reward history
@@ -445,8 +401,7 @@ def main(_):
                     del action_history[:1]
                     del done_history[:1]
 
-
-            except tf.python.framework.errors_impl.OutOfRangeError:
+            except tf.errors.OutOfRangeError:
                 done = True
                 break
 
@@ -461,8 +416,6 @@ def main(_):
 
         done = False
 
-        #state = np.concatenate([derm.state, [0]])
-
         management = np.array([])
         CNN_error = np.array([])
         true_label = np.array([])
@@ -470,7 +423,6 @@ def main(_):
         actions_table = np.zeros([len(vocab),Flags.n_actions])
 
         while not done:
-            #CNN_error = np.append(CNN_error, np.argmax(state))
             try:
                 true_label = np.append(true_label, derm.gt)
 
@@ -484,7 +436,7 @@ def main(_):
 
                 management = np.append(management, action)
 
-                _, state, reward, done,_ = derm.step(patients_val, val_labels.shape[0], Flags.n_actions, action)
+                _, state, reward, done, _ = derm.step(patients_val, val_labels.shape[0], Flags.n_actions, action)
 
                 episode_val_score += reward
 

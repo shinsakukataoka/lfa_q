@@ -14,10 +14,8 @@ import pandas as pd
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
 
-
 from tensorflow.python.keras import backend
 from tensorflow.keras.backend import clear_session
-
 
 import time
 
@@ -27,8 +25,6 @@ import csv
 
 import tensorflow as tf
 import tensorflow.compat.v1 as tf1
-import tensorflow.keras as K
-
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import normalize
 
@@ -40,7 +36,6 @@ info_type = 'both' #prob,features,both
 balance_episode = True
 
 os.environ["CUDA_VISIBLE_DEVICES"] = str(0)
-
 
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -54,26 +49,6 @@ def read_and_decode(dataset, batch_size, is_training, data_size,n_patients):
         dataset = dataset.batch(batch_size, drop_remainder=False)
         dataset = dataset.repeat(None)
     return dataset
-
-def create_q_model(n_classes,n_words,n_actions):
-
-    inputs = K.layers.Input(n_classes)
-
-    feat = K.layers.Lambda(lambda x: x[:, 0:n_classes - n_words])(inputs)
-
-    emb = K.layers.Dropout(0.05)(feat)
-
-    prob = K.layers.Lambda(lambda x: x[:, n_classes - n_words:n_classes])(inputs)
-
-    emb = K.layers.Dense(256, activation="relu")(emb)
-
-    emb = K.layers.Dropout(0.05)(emb)
-    
-    emb = K.layers.Concatenate(axis=1)([emb, prob])
-
-    action = K.layers.Dense(n_actions, activation=None)(emb)
-
-    return K.Model(inputs=inputs, outputs=action)
 
 def initialize_clinical_practice(clinical_cases_feat,clinical_cases_labels,dataset_size,n_classes,is_training,n_patients,set_distribution):
 
@@ -150,66 +125,15 @@ class Dermatologist(Env):
 
     def step(self,patients,n_patients,n_actions,action):
 
-        #Reward Table (#actions X #Classes - AKIEC/BCC/BKL/DF/MEL/NV/VASC)
-
         if n_actions == 2:
-            ## PERSONAL (Expert 1) - 2 actions
+            # 2 actions
             reward_table = np.array([[-3, -4,  4,  4, -5,  4,  4], #dismiss
-                                     [ 3,  4, -1, -1,  5, -1, -1], #excise
-                                    ],np.float32)
-            
-            # ## PERSONAL (Expert 2) - 2 actions
-            # reward_table = np.array([[-5, -5, 20, 20, -20, 20, 20], #dismiss
-            #                          [ 5,  5, -5, -5,  20, -5, -5], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 3) - 2 actions
-            # reward_table = np.array([[-1, -5,  2,  2, -10,  2,  2], #dismiss
-            #                          [ 2,  5, -3, -3,  10, -3, -3], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 4) - 2 actions
-            # reward_table = np.array([[-3, -4,  3,  3, -5,  3,  3], #dismiss
-            #                          [ 1,  2, -3, -3,  5, -3, -3], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 5) - 2 actions
-            # reward_table = np.array([[-3, -5,  5,  5, -5,  5,  5], #dismiss
-            #                          [ 5,  5, -5, -5,  5, -5, -5], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 6) - 2 actions
-            # reward_table = np.array([[-3, -3,  5,  5, -5,  5,  5], #dismiss
-            #                          [ 1,  4, -1, -1,  5, -1, -1], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 7) - 2 actions
-            # reward_table = np.array([[  1,  1,  5,  5, -3,  5,  5], #dismiss
-            #                          [ -3,  5, -5, -5,  5, -5, -5], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 8) - 2 actions
-            # reward_table = np.array([[ -1, -3,  5,  5, -5,  5,  5], #dismiss
-            #                          [  1,  3, -1, -1,  5, -1, -1], #excise
-            #                         ],np.float32)
-            
-            # ## PERSONAL (Expert 9) - 2 actions
-            # reward_table = np.array([[-1, -2,  5,  5, -5,  5,  5], #dismiss
-            #                          [ 2,  4, -4, -4,  5, -4, -4], #excise
-            #                         ],np.float32)
-
-            # ## PERSONAL (Expert 10) - 2 actions
-            # reward_table = np.array([[-2, -3,  4,  4, -5,  4,  4], #dismiss
-            #                          [ 3,  5, -3, -3,  5, -3, -3], #excise
-            #                         ],np.float32)
-
+                                     [ 3,  4, -1, -1,  5, -1, -1]],np.float32)
         else:
-            ## CONSENSOUS MEDIAN - 3 Actions
+            # 3 actions
             reward_table = np.array([[  -2,  -3,   5,   5, -5,   5,    5], #dismiss
                                      [   3,   1,  -1,  -1, -5,  -1,   -1], #cryo
-                                     [   2, 4.5,  -3,  -3,  5,  -3,  -3], #excise
-                                    ],np.float32)
-        
+                                     [   2, 4.5,  -3,  -3,  5,  -3,  -3]],np.float32)
 
         self.revised_state = tf.one_hot(action,n_actions)
 
@@ -250,6 +174,7 @@ def main(_):
     epsilon_min = 0.1  # Minimum epsilon greedy parameter
     epsilon_max = 0.2  # Maximum epsilon greedy parameter
     epsilon_interval = (epsilon_max - epsilon_min)  # Rate at which to reduce chance of random action being taken
+    alpha = 0.01  # Learning rate for Q-learning
 
     #### Import Datasets ####
     tf1.enable_eager_execution()
@@ -279,10 +204,7 @@ def main(_):
 
     features2 = pd.read_csv("data/vectorDB.csv")
 
-    #features2.pop('image')
-    #features2.pop('isic_id') #vienna
     features2.pop('dx')
-
     features2 = np.asarray(features2, dtype='float32')
 
     features = np.concatenate([features1,features2],axis=1)
@@ -310,44 +232,45 @@ def main(_):
 
     derm = Dermatologist(patients,n_words,vocab,Flags.n_actions)
 
-    q_network = create_q_model(derm.state.shape[0],n_words,Flags.n_actions)
+    # We will now use a tabular Q-learning approach
+    # Q-table will be a dictionary:
+    # Keys: (state_tuple, action)
+    # Values: Q-value
+    Q_table = {}
 
-    q_network.summary()
+    #def discretize_state(state):
+    #    return tuple(np.round(state, 2))
 
-    target_network = create_q_model(derm.state.shape[0],n_words,Flags.n_actions)
+    # for now, to try different granularity, try this:
 
-    optimizer = K.optimizers.Adam(learning_rate=0.025, clipnorm=1.0)
+    def discretize_state(state, decimals=2):
+        return tuple(np.round(state, 2))
 
 
-    # Experience replay buffers
-    action_history = []
-    state_history = []
-    state_next_history = []
-    rewards_history = []
-    done_history = []
+    def get_Q_value(state, action):
+        state_disc = discretize_state(state)
+        key = (state_disc, action)
+        return Q_table.get(key, 0.0)
+
+    def set_Q_value(state, action, value):
+        state_disc = discretize_state(state)
+        key = (state_disc, action)
+        Q_table[key] = value
+
     episode_reward_history = []
     episode_val_reward_history = []
     validation_bacc_history = []
     baseline_best_history = []
     baseline_workse_history = []
-    mel_history = []
-    unk_history = []
-    cnn_history = []
-    best_bacc = 0
+
     best_reward = -1*math.inf
-    iter_count = 0
-    # Number of frames to take random action and observe output
+    best_actions_table = None
+
+    # Parameters
     epsilon_random_frames = 20
-    # Number of frames for exploration
     epsilon_greedy_frames = 100000.0
-    # Maximum replay length
-    max_memory_length = 10000
-    # Train the model after 10 actions
-    update_after_actions = 10
-    # How often to update the target network
-    update_target_network = train_feat.shape[0]
-    # Using huber loss for stability
-    loss_function = K.losses.Huber()
+    iter_count = 0
+    max_memory_length = 10000  # Not used now as we do online Q-learning directly
 
     for episode in range(Flags.n_episodes):
         i = 1
@@ -356,8 +279,6 @@ def main(_):
         done = False
         episode_score = 0
 
-        episode_val_score = 0
-
         state = derm.state
 
         n_not_random = 0
@@ -365,86 +286,31 @@ def main(_):
             try:
                 iter_count += 1
 
-                # Use epsilon-greedy for exploration
+                # Epsilon-greedy action selection
                 if iter_count < epsilon_random_frames or epsilon > np.random.rand(1)[0]:
                     action = derm.action_space.sample()
                 else:
-                    state_tensor = tf.convert_to_tensor(state)
-                    state_tensor = tf.expand_dims(state_tensor, 0)
-                    action_probs = q_network(state_tensor, training=False)
-                    # Take best action
-                    action = tf.argmax(action_probs[0]).numpy()
-
+                    # Choose best action based on Q
+                    q_values = [get_Q_value(state, a) for a in range(Flags.n_actions)]
+                    action = np.argmax(q_values)
                     n_not_random += 1
 
-                # Decay probability of taking random action
+                # Decay epsilon
                 epsilon -= epsilon_interval / epsilon_greedy_frames
                 epsilon = max(epsilon, epsilon_min)
 
                 revised_state,n_state,reward,done,_ = derm.step(patients,Flags.n_patients,Flags.n_actions,action)
-                #print('The decision is ' + vocab[np.argmax(revised_state)])
-
                 episode_score += reward
-                #n_state = np.concatenate([n_state, [0]])
 
-                # Save actions and states in replay buffer
-                action_history.append(action)
-                state_history.append(state)
-                state_next_history.append(n_state)
-                done_history.append(done)
-                rewards_history.append(reward)
+                # Q-learning update
+                old_Q = get_Q_value(state, action)
+                next_q_values = [get_Q_value(n_state, a) for a in range(Flags.n_actions)]
+                td_target = reward + gamma * np.max(next_q_values) * (1 - done)
+                new_Q = old_Q + alpha * (td_target - old_Q)
+                set_Q_value(state, action, new_Q)
+
                 state = n_state
-
                 i += 1
-                # Update every fourth frame
-                if iter_count % update_after_actions == 0 and len(done_history) > 100:
-                    # Get indices of samples for replay buffers
-                    indices = np.random.choice(range(len(done_history)), size=100)
-
-                    # Using list comprehension to sample from replay buffer
-                    state_sample = np.array([state_history[i] for i in indices])
-                    state_next_sample = np.array([state_next_history[i] for i in indices])
-                    rewards_sample = [rewards_history[i] for i in indices]
-                    action_sample = [action_history[i] for i in indices]
-                    done_sample = tf.convert_to_tensor([float(done_history[i]) for i in indices])
-
-                    # Build the updated Q-values for the sampled future states
-                    # Use the target model for stability
-                    future_rewards = target_network.predict(state_next_sample)
-                    # Q value = reward + discount factor * expected future reward
-                    updated_q_values = rewards_sample + gamma * tf.reduce_max(future_rewards, axis=1)
-
-                    # If final frame set the last value to -1
-                    updated_q_values = updated_q_values * (1 - done_sample) - done_sample
-
-                    # Create a mask so we only calculate loss on the updated Q-values
-                    masks = tf.one_hot(action_sample, Flags.n_actions)
-
-                    with tf.GradientTape() as tape:
-                        # Train the model on the states and updated Q-values
-                        q_values = q_network(state_sample, training=True)
-
-                        # Apply the masks to the Q-values to get the Q-value for action taken
-                        q_action = tf.reduce_sum(tf.multiply(q_values, masks), axis=1)
-                        # Calculate loss between new Q-value and old Q-value
-                        loss = loss_function(updated_q_values, q_action)
-
-                    # Backpropagation
-                    grads = tape.gradient(loss, q_network.trainable_variables)
-                    optimizer.apply_gradients(zip(grads, q_network.trainable_variables))
-
-                if iter_count % update_target_network == 0:
-                    # update the the target network with new weights
-                    target_network.set_weights(q_network.get_weights())
-
-                # Limit the state and reward history
-                if len(rewards_history) > max_memory_length:
-                    del rewards_history[:1]
-                    del state_history[:1]
-                    del state_next_history[:1]
-                    del action_history[:1]
-                    del done_history[:1]
-
 
             except tf.python.framework.errors_impl.OutOfRangeError:
                 done = True
@@ -453,7 +319,6 @@ def main(_):
         print('The episode duration was ',i-1)
         print('The episode reward was ',episode_score)
         print('The number of not random actions was ', n_not_random)
-        # Update running reward to check condition for solving
         episode_reward_history.append(episode_score)
 
         ## Validation Phase ##
@@ -461,33 +326,26 @@ def main(_):
 
         done = False
 
-        #state = np.concatenate([derm.state, [0]])
-
         management = np.array([])
-        CNN_error = np.array([])
         true_label = np.array([])
 
         actions_table = np.zeros([len(vocab),Flags.n_actions])
 
+        episode_val_score = 0
+
         while not done:
-            #CNN_error = np.append(CNN_error, np.argmax(state))
             try:
                 true_label = np.append(true_label, derm.gt)
-
                 diag = derm.gt
 
-                state_tensor = tf.convert_to_tensor(state)
-                state_tensor = tf.expand_dims(state_tensor, 0)
-                action_probs = q_network(state_tensor, training=False)
-                # Take best action
-                action = tf.argmax(action_probs[0]).numpy()
+                # Greedy policy for validation
+                q_values = [get_Q_value(state, a) for a in range(Flags.n_actions)]
+                action = np.argmax(q_values)
 
                 management = np.append(management, action)
 
                 _, state, reward, done,_ = derm.step(patients_val, val_labels.shape[0], Flags.n_actions, action)
-
                 episode_val_score += reward
-
                 actions_table[diag,action] +=1
 
             except tf.python.framework.errors_impl.OutOfRangeError:
@@ -500,7 +358,7 @@ def main(_):
         if best_reward < episode_val_score:
             best_reward = episode_val_score
             best_actions_table = actions_table
-            q_network.save_weights('models/best_q_network_management',save_format='tf')
+            # Since we don't have networks now, we won't save weights. Just record best actions table.
 
         ##Return to train
         _,patients = derm.reset(train_feat,train_labels, train_labels.shape[0], n_words, vocab,True,Flags.n_patients,counts)
