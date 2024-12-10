@@ -9,4 +9,5 @@
 
 # Exclude the /data directory and all its contents
 /data/
-
+/model/
+/models/
