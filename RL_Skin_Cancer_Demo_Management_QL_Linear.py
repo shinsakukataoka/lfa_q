@@ -39,6 +39,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = str(0)
 
 from sklearn.feature_extraction.text import CountVectorizer
 
+# Dont change
+
 def read_and_decode(dataset, batch_size, is_training, data_size,n_patients):
     if is_training:
         dataset = dataset.shuffle(buffer_size=data_size, reshuffle_each_iteration=True)
@@ -49,6 +51,8 @@ def read_and_decode(dataset, batch_size, is_training, data_size,n_patients):
         dataset = dataset.batch(batch_size, drop_remainder=False)
         dataset = dataset.repeat(None)
     return dataset
+
+# Dont change
 
 def initialize_clinical_practice(clinical_cases_feat,clinical_cases_labels,dataset_size,n_classes,is_training,n_patients,set_distribution):
 
@@ -102,10 +106,14 @@ def initialize_clinical_practice(clinical_cases_feat,clinical_cases_labels,datas
 
     return patients
 
+# Dont change
+
 def get_next_patient(patients):
     patient_scores,patient_diagnostics = patients.get_next()
 
     return np.squeeze(patient_scores),patient_diagnostics.numpy()[0]
+
+# Dont change
 
 class Dermatologist(Env):
 
@@ -176,6 +184,8 @@ def main(_):
     alpha = 0.1  # Learning rate for Q-learning
 
     #### Import Datasets ####
+    # Largely no change
+
     tf1.enable_eager_execution()
 
     database = pd.read_csv('data/vectorDB.csv')
@@ -215,7 +225,7 @@ def main(_):
     # W is a matrix of shape [state_dim, n_actions]
     # state_dim = derm.state.shape[0]
 
-    # Replace the whole 'create_q_model' function
+    # To replace the whole 'create_q_model' function
 
     state_dim = derm.state.shape[0]
     n_actions = Flags.n_actions
@@ -248,59 +258,47 @@ def main(_):
     for episode in range(Flags.n_episodes):
         i = 1
         print('Starting episode ', episode)
-
         done = False
         episode_score = 0
-
         state = derm.state
         n_not_random = 0
-
         while not done:
             try:
                 iter_count += 1
-
                 # Epsilon-greedy action selection
                 if iter_count < epsilon_random_frames or epsilon > np.random.rand(1)[0]:
-                    action = derm.action_space.sample()
+                    action = derm.action_space.sample() # @
                 else:
                     # Choose best action based on current linear Q-values
                     q_values = get_Q_values(state)
                     action = np.argmax(q_values)
                     n_not_random += 1
-
                 # Decay epsilon
                 epsilon -= epsilon_interval / epsilon_greedy_frames
                 epsilon = max(epsilon, epsilon_min)
-
                 revised_state, n_state, reward, done, _ = derm.step(patients, Flags.n_patients, Flags.n_actions, action)
                 episode_score += reward
-
                 # Q-learning update with linear function approximation
                 q_values_next = get_Q_values(n_state)
                 q_values_curr = get_Q_values(state)
                 old_Q = q_values_curr[action]
-
                 td_target = reward + gamma * np.max(q_values_next) * (1 - done)
                 td_error = td_target - old_Q
-
                 # Update weights for the chosen action
                 update_weights(state, action, td_error)
-
                 state = n_state
                 i += 1
-
             except tf.python.framework.errors_impl.OutOfRangeError:
                 done = True
                 break
-
         print('The episode duration was ', i-1)
         print('The episode reward was ', episode_score)
         print('The number of not random actions was ', n_not_random)
         episode_reward_history.append(episode_score)
-
-        ## Validation Phase ##
+        
+        # now essentially we want all we want from one episode
+        # now try with unseen data
         state, patients_val = derm.reset(val_feat, val_labels, val_labels.shape[0], n_words, vocab, False, Flags.n_patients, counts)
-
         done = False
         management = np.array([])
         true_label = np.array([])
@@ -311,16 +309,12 @@ def main(_):
             try:
                 true_label = np.append(true_label, derm.gt)
                 diag = derm.gt
-
-                # Greedy policy for validation
-                q_values = get_Q_values(state)
-                action = np.argmax(q_values)
-
+                q_values = get_Q_values(state) # no longer epsilon: always do the best one
+                action = np.argmax(q_values) 
                 management = np.append(management, action)
                 _, state, reward, done, _ = derm.step(patients_val, val_labels.shape[0], Flags.n_actions, action)
                 episode_val_score += reward
                 actions_table[diag, action] +=1
-
             except tf.python.framework.errors_impl.OutOfRangeError:
                 done = True
                 break
@@ -343,19 +337,21 @@ def main(_):
     print(actions_table)
     print('The final reward was ', episode_val_score)
 
-    plt.figure(1)
-    plt.plot(episode_reward_history)
-    plt.xlabel('Episodes')
-    plt.ylabel('Reward Per Episode - Train')
-    plt.show()
+    #plt.figure(1)
+    #plt.plot(episode_reward_history)
+    #plt.xlabel('Episodes')
+    #plt.ylabel('Reward Per Episode - Train')
+    #plt.show()
 
-    plt.figure(2)
-    plt.plot(episode_val_reward_history)
-    plt.plot(baseline_best_history)
-    plt.plot(baseline_workse_history)
-    plt.xlabel('Episodes')
-    plt.ylabel('Reward Per Episode - Val')
-    plt.show()
+    #plt.figure(2)
+    #plt.plot(episode_val_reward_history)
+    #plt.plot(baseline_best_history)
+    #plt.plot(baseline_workse_history)
+    #plt.xlabel('Episodes')
+    #plt.ylabel('Reward Per Episode - Val')
+    #plt.show()
+
+# No change
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

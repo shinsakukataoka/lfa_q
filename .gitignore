@@ -1,11 +1,20 @@
 /env/
-
 # Exclude all .png files
 *.png
 
 # Exclude all .err and .out files
 *.err
 *.out
+
+# Codes that are not relevant
+
+RL_Skin_Cancer_Demo_Diagnosis.py
+RL_Skin_Cancer_Demo_DoubleDQN.py
+RL_Skin_Cancer_Demo_Management_QL.py
+RL_Skin_Cancer_Original.py
+Skin_Cancer_RL_Demo_Patient_Management.py
+view.py
+optuna_rl.py
 
 # Exclude the /data directory and all its contents
 /data/

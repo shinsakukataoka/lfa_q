@@ -217,10 +217,11 @@ def main(_):
     epsilon_min = 0.1  # Minimum epsilon greedy parameter
     epsilon_max = 0.2  # Maximum epsilon greedy parameter
     epsilon_interval = (epsilon_max - epsilon_min)  # Rate at which to reduce chance of random action being taken
-    initial_alpha = 0.1  # Initial learning rate
-    decay_rate = 0.01  # Decay rate for learning rate
+    initial_alpha = 0.01  # Initial learning rate: try with 0.1 first 
+    decay_rate = 0.005  # Decay rate for learning rate: try with 0.01, if initial alpha is 0.1, just considering the ratio
 
     #### Import Datasets ####
+    # Largely no change
     tf1.enable_eager_execution()
 
     database = pd.read_csv('data/vectorDB.csv')
@@ -272,53 +273,58 @@ def main(_):
     for episode in range(Flags.n_episodes):
         alpha = initial_alpha / (1 + decay_rate * episode)  # Adaptive learning rate
         print(f"Episode {episode}: Learning Rate = {alpha:.4f}")
-
         i = 1
         print('Starting episode ', episode)
-
         done = False
         episode_score = 0
-
         state = derm.state
         n_not_random = 0
-
         while not done:
             try:
                 iter_count += 1
-
+                # epsilon greedy policy implementation (MEMO)
+                # if the agent is in the initial exploration phase (iter_count < epsilon_random_frames) 
+                # or
+                # a random number is less than current epsilon threshold
+                # then action is taken randomly
+                # else, we get the q-value for the current state (get_Q_values(state)) and then, the action with the highest Q-value
+                # will be selected
                 if iter_count < epsilon_random_frames or epsilon > np.random.rand(1)[0]:
                     action = derm.action_space.sample()
                 else:
                     q_values = get_Q_values(state)
                     action = np.argmax(q_values)
                     n_not_random += 1
-
+                # epsilon value update
                 epsilon -= epsilon_interval / epsilon_greedy_frames
                 epsilon = max(epsilon, epsilon_min)
-
+                # take an action, and observe the reward
                 revised_state, n_state, reward, done, _ = derm.step(patients, Flags.n_patients, Flags.n_actions, action)
                 episode_score += reward
-
+                # note that TD target = r + gamma * max_a Q(s',a)
                 q_values_next = get_Q_values(n_state)
                 q_values_curr = get_Q_values(state)
                 old_Q = q_values_curr[action]
-
                 td_target = reward + gamma * np.max(q_values_next) * (1 - done)
                 td_error = td_target - old_Q
-
                 update_weights(state, action, td_error, alpha)
-
                 state = n_state
                 i += 1
-
             except tf.python.framework.errors_impl.OutOfRangeError:
                 done = True
                 break
+        
+        # by then, we have: 
+        # TD target
+        # TD error
+        # Updated W
 
         print('The episode duration was ', i - 1)
         print('The episode reward was ', episode_score)
         print('The number of not random actions was ', n_not_random)
         episode_reward_history.append(episode_score)
+
+        # then, we evaluate how the policy is improving over time in each episode
 
         state, patients_val = derm.reset(val_feat, val_labels, val_labels.shape[0], n_words, vocab, False, Flags.n_patients, counts)
         done = False
@@ -326,6 +332,7 @@ def main(_):
         true_label = np.array([])
         actions_table = np.zeros([len(vocab), Flags.n_actions])
         episode_val_score = 0
+
 
         while not done:
             try:
@@ -385,19 +392,21 @@ def main(_):
     print(actions_table)
     print('The final reward was ', episode_val_score)
 
-    plt.figure(1)
-    plt.plot(episode_reward_history)
-    plt.xlabel('Episodes')
-    plt.ylabel('Reward Per Episode - Train')
-    plt.show()
+    #plt.figure(1)
+    #plt.plot(episode_reward_history)
+    #plt.xlabel('Episodes')
+    #plt.ylabel('Reward Per Episode - Train')
+    #plt.show()
 
-    plt.figure(2)
-    plt.plot(episode_val_reward_history)
-    plt.plot(baseline_best_history)
-    plt.plot(baseline_workse_history)
-    plt.xlabel('Episodes')
-    plt.ylabel('Reward Per Episode - Val')
-    plt.show()
+    #plt.figure(2)
+    #plt.plot(episode_val_reward_history)
+    #plt.plot(baseline_best_history)
+    #plt.plot(baseline_workse_history)
+    #plt.xlabel('Episodes')
+    #plt.ylabel('Reward Per Episode - Val')
+    #plt.show()
+
+# No change
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
